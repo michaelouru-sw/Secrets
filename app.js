@@ -1,5 +1,7 @@
 //jshint esversion:6
 require("dotenv").config();
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
@@ -29,13 +31,6 @@ mongoose
       email: String,
       password: String,
     });
-    //Encryption
-    console.log(process.env);
-    userSchema.plugin(encrypt, {
-      secret: process.env.SECRET,
-      encryptedFields: ["password"],
-    });
-
     //Create Document Model
     const User = new mongoose.model("User", userSchema);
     app
@@ -49,15 +44,22 @@ mongoose
 
         User.findOne({ email: username }, (err, foundUser) => {
           if (!err) {
-            if (foundUser.password === password) {
-              res.render("secrets");
-              console.log(foundUser.password);
+            if (foundUser) {
+              bcrypt.compare(password, foundUser.password, (err, result) => {
+                if (result === true) {
+                  res.render("secrets");
+                } else {
+                  res.render("login", { loginTitle: "Invalid Password" });
+                }
+              });
             } else {
               res.render("login", { loginTitle: "Invalid Logins" });
               console.log("Wrong password entered");
             }
           } else {
-            res.render("login", { loginTitle: "Invalid Username" });
+            res.render("login", {
+              loginTitle: "There was a problem loging you in...",
+            });
             console.log(err);
           }
         });
@@ -77,30 +79,22 @@ mongoose
         res.render("register");
       })
       .post((req, res) => {
-        const newUser = new User({
-          email: req.body.username,
-          password: req.body.password,
-        });
-        newUser.save((err) => {
+        bcrypt.hash(req.body.password, saltRounds, (err, hash) => {
           if (!err) {
-            res.render("secrets");
-          } else {
-            console.log(err);
+            const newUser = new User({
+              email: req.body.username,
+              password: hash,
+            });
+            newUser.save((err) => {
+              if (!err) {
+                res.render("secrets");
+              } else {
+                console.log(err);
+              }
+            });
           }
         });
       });
-
-    app.route("/login").post((req, res) => {
-      const username = req.body.username;
-      const password = req.body.password;
-
-      User.findOne({ email: username }, (err, foundUser) => {
-        if (err) {
-          console.log(err);
-        }
-      });
-    });
-
     app.listen(3000, () => {
       console.log("Server started on port 3000");
     });
